@@ -40,6 +40,7 @@ option(ENABLE_DISCORD_RPC "Enable the Discord RPC integration" ON)
 option(ENABLE_UPDATER "Enables the options to updater" ON)
 option(ENABLE_TESTS "Build unit tests (requires GTest)" OFF)
 option(ENABLE_SYSTEM_LIBRARIES "Enable building against system libraries" OFF)
+option(ENABLE_ARM64_RECOMPILER "Build the x86->LLVM IR->ARM64 recompiler, its CLI tool and tests (requires LLVM dev libraries >= 18)" OFF)
 
 # First, determine whether to use CMAKE_OSX_ARCHITECTURES or CMAKE_SYSTEM_PROCESSOR.
 if (APPLE AND CMAKE_OSX_ARCHITECTURES)
@@ -1214,6 +1215,47 @@ set(SHADNET src/shadnet/client.cpp
 )
 if (APPLE)
     list(APPEND EMULATOR src/sdl_window_apple.mm)
+endif()
+
+# x86 -> LLVM IR -> ARM64 recompiler (AOT + fallback JIT) for the Android/arm64
+# port. Built as standalone targets so the default desktop build is untouched;
+# the Android APK consumes the same sources through
+# android/app/src/main/cpp/CMakeLists.txt. See documents/arm64-android-port.md.
+if (ENABLE_ARM64_RECOMPILER)
+    find_package(LLVM REQUIRED CONFIG)
+    message(STATUS "ARM64 recompiler: using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
+    llvm_map_components_to_libnames(ARM64_RECOMPILER_LLVM_LIBS
+        core orcjit executionengine passes support target mc
+        aarch64codegen aarch64asmparser aarch64desc aarch64info)
+    if (ARCHITECTURE STREQUAL "x86_64")
+        llvm_map_components_to_libnames(ARM64_RECOMPILER_LLVM_HOST_LIBS
+            x86codegen x86asmparser x86desc x86info)
+        list(APPEND ARM64_RECOMPILER_LLVM_LIBS ${ARM64_RECOMPILER_LLVM_HOST_LIBS})
+    endif()
+
+    add_library(arm64_recompiler STATIC
+        src/core/arm64_recompiler/guest_context.h
+        src/core/arm64_recompiler/x86_decoder.cpp
+        src/core/arm64_recompiler/x86_decoder.h
+        src/core/arm64_recompiler/ir_emitter.cpp
+        src/core/arm64_recompiler/ir_emitter.h
+        src/core/arm64_recompiler/llvm_helpers.h
+        src/core/arm64_recompiler/aot_compiler.cpp
+        src/core/arm64_recompiler/aot_compiler.h
+        src/core/arm64_recompiler/jit_engine.cpp
+        src/core/arm64_recompiler/jit_engine.h
+        src/core/arm64_recompiler/recompiler_api.cpp
+        src/core/arm64_recompiler/recompiler_api.h
+    )
+    target_include_directories(arm64_recompiler PUBLIC src ${LLVM_INCLUDE_DIRS})
+    target_compile_definitions(arm64_recompiler PUBLIC ${LLVM_DEFINITIONS})
+    target_link_libraries(arm64_recompiler PUBLIC Zydis::Zydis ${ARM64_RECOMPILER_LLVM_LIBS})
+
+    add_executable(x86_to_arm64 src/tools/x86_to_arm64.cpp)
+    target_link_libraries(x86_to_arm64 PRIVATE arm64_recompiler)
+
+    add_executable(arm64_recompiler_test tests/arm64_recompiler_test.cpp)
+    target_link_libraries(arm64_recompiler_test PRIVATE arm64_recompiler)
 endif()
 
 if(NOT ENABLE_TESTS)

@@ -8,10 +8,12 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "common/types.h"
+#include "core/arm64_recompiler/guest_loader.h"
 
 struct ANativeWindow;
 
@@ -113,6 +115,25 @@ private:
     std::filesystem::path firmware_dir;
     std::filesystem::path game_path;
     std::vector<CodeRegion> code_regions;
+
+    // Loaded guest module and the loader that owns its import trampolines
+    // (both valid once LoadGame succeeds).
+    std::unique_ptr<Core::Recompiler::GuestLoader> guest_loader;
+    std::optional<Core::Recompiler::GuestLoader::LoadedModule> loaded_module;
+
+    int last_boot_status = -1;
+    std::string last_boot_message;
+
+public:
+    /// Result of the last Start() boot attempt, for the frontend to display.
+    int GetLastBootStatus() const {
+        return last_boot_status;
+    }
+    std::string GetLastBootMessage() const {
+        return last_boot_message;
+    }
+
+private:
 
     std::atomic<ANativeWindow*> window{nullptr};
     std::atomic<int> surface_generation{0};

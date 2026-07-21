@@ -109,6 +109,15 @@ JNIEXPORT jint JNICALL Java_net_shadps4_android_NativeLibrary_getState(JNIEnv*, 
     return static_cast<jint>(Android::Host::Instance().GetState());
 }
 
+JNIEXPORT jint JNICALL Java_net_shadps4_android_NativeLibrary_getLastBootStatus(JNIEnv*, jclass) {
+    return Android::Host::Instance().GetLastBootStatus();
+}
+
+JNIEXPORT jstring JNICALL Java_net_shadps4_android_NativeLibrary_getLastBootMessage(JNIEnv* env,
+                                                                                    jclass) {
+    return env->NewStringUTF(Android::Host::Instance().GetLastBootMessage().c_str());
+}
+
 // ---- Input ---------------------------------------------------------------
 
 JNIEXPORT void JNICALL Java_net_shadps4_android_NativeLibrary_setPadButtons(JNIEnv*, jclass,

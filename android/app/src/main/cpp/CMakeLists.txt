@@ -59,6 +59,9 @@ add_subdirectory(${SHADPS4_ROOT}/externals/zydis zydis EXCLUDE_FROM_ALL)
 set(SHADPS4_ANDROID_SOURCES
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/x86_decoder.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/recompiler_api.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/guest_loader.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/boot.cpp
+    ${SHADPS4_ROOT}/src/core/aerolib/aerolib.cpp
     ${SHADPS4_ROOT}/src/android/android_host.cpp
     ${SHADPS4_ROOT}/src/android/jni_bridge.cpp
 )

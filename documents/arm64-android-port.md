@@ -67,15 +67,64 @@ LLVM's optimizer deletes the dead computations. Guest memory accesses are
 direct host loads/stores (flat address space, same trade-off the x86 build
 makes).
 
+## Booting a title
+
+`guest_loader.{h,cpp}` and `boot.{h,cpp}` turn the translator into something
+that boots an executable:
+
+1. **GuestLoader** maps a decrypted PS4 executable — plain ELF (homebrew /
+   OpenOrbis) or a fake/decrypted SELF (fSELF) or decrypted dump of a game you
+   own. It maps `PT_LOAD` segments at their virtual addresses, reads the PS4
+   dynamic table (`DT_SCE_*`) out of `PT_SCE_DYNLIBDATA`, applies relocations
+   (`RELATIVE`, `GLOB_DAT`, `JMP_SLOT`, `64`) and resolves imports. Encrypted
+   dumps are rejected on purpose — supply decrypted images.
+2. Imports are decoded through shadPS4's existing NID table
+   (`core/aerolib`), so an unresolved symbol is reported by its real function
+   name (e.g. `sceKernelAllocateDirectMemory`) rather than an opaque hash.
+   Each unresolved import points at a per-symbol trampoline.
+3. **Booter** lays out the PS4 process entry stack exactly like the desktop
+   linker's `RunMainEntry` (16-byte aligned, `EntryParams` pushed, `rdi` =
+   params, `rsi` = exit function), installs a FreeBSD-flavored syscall handler
+   (the PS4 kernel ABI: `write`, `read`, `mmap`, `munmap`, `exit`…) and drives
+   the dispatcher from the entry point.
+
+The result is honest about where it stops: a clean `exit()`, or the **name of
+the first HLE function the game called that isn't implemented yet**, or an
+unsupported instruction. That "boots until the first missing HLE" behavior is
+the observable milestone toward full titles.
+
+Drive it from the desktop:
+
+```sh
+cmake --build build --target boot_x86_elf arm64_boot_test
+./build/arm64_boot_test              # builds a tiny ELF, boots it, checks output
+./build/boot_x86_elf your_dump/eboot.bin          # boot a decrypted dump
+./build/boot_x86_elf --imports homebrew.elf       # list the imports it needs
+```
+
+`tests/arm64_boot_test.cpp` assembles a real x86-64 ELF that calls
+`write(1, "...")` then `exit(0)`, loads it through `GuestLoader`, and boots it
+through `Booter`: the message is produced by the *translated* guest code and
+captured through the emulated syscall — the whole chain, verified in CI.
+
+On Android the same `Booter` runs from `Host::Start()`: `loadGame()` maps the
+executable, `precompileAot()` translates it, `startEmulation()` boots it, and
+`getLastBootStatus()/getLastBootMessage()` report where it stopped.
+
 ### What is deliberately not finished
 
 * The instruction subset covers the common integer/control-flow/scalar-SSE
   core (see `ir_emitter.cpp`); packed-vector, atomic/`LOCK` and string
   instructions currently exit to the fallback connector.
 * `#DE`-style guest exceptions are not modeled.
-* The emulator core itself (linker, HLE libraries, video_core) does not build
-  against the NDK yet; the Android host exposes weak hooks
-  (`Android::Hooks::*` in `src/android/android_host.cpp`) where it attaches.
+* The syscall handler implements only the handful of kernel calls reached
+  during early boot; and the HLE surface (`sceKernel*`, `sceGnmDriver*`,
+  audio, pad…) is not implemented — a real game boots until the first such
+  call, which the loader names for you. Implementing those libraries against
+  this boot chain is the remaining work to run full titles, and the weak
+  hooks (`Android::Hooks::*`) are where shadPS4's existing HLE attaches.
+* The emulator core (full linker with multi-`.prx` dependency loading,
+  video_core / Vulkan) does not build against the NDK yet.
 
 ## Trying the pipeline on a desktop
 

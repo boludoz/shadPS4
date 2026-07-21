@@ -9,6 +9,7 @@
 
 #include "android/android_host.h"
 #include "core/arm64_recompiler/aot_compiler.h"
+#include "core/arm64_recompiler/boot.h"
 #include "core/arm64_recompiler/jit_engine.h"
 
 // The full emulator core (Core::Emulator, linker, HLE libraries, Vulkan
@@ -85,12 +86,29 @@ bool Host::LoadGame(const std::string& path) {
     if (GetState() != State::Idle) {
         return false;
     }
-    std::vector<CodeRegion> regions;
-    if (!Hooks::LoadGame(path, regions)) {
+    // Load the decrypted PS4 executable directly with the built-in loader
+    // (maps segments, applies relocations, resolves imports). The weak
+    // Hooks::LoadGame lets the full emulator core augment this later (mounting
+    // the game's filesystem, loading dependent .prx modules).
+    guest_loader = std::make_unique<Core::Recompiler::GuestLoader>();
+    auto module = guest_loader->Load(path);
+    if (!module) {
+        guest_loader.reset();
         return false;
     }
     game_path = path;
-    code_regions = std::move(regions);
+    loaded_module = std::move(module);
+    code_regions.clear();
+    code_regions.push_back(
+        CodeRegion{loaded_module->image_low, loaded_module->image_high - loaded_module->image_low,
+                   loaded_module->entry_points});
+
+    std::vector<CodeRegion> extra;
+    if (Hooks::LoadGame(path, extra)) {
+        for (auto& region : extra) {
+            code_regions.push_back(std::move(region));
+        }
+    }
     return true;
 }
 
@@ -139,12 +157,32 @@ bool Host::PrecompileAot() {
 }
 
 bool Host::Start() {
-    if (!Hooks::StartEmulator()) {
+    if (!loaded_module || !jit || !guest_loader) {
         return false;
     }
+    // If the full emulator core is linked it takes over (real HLE libraries,
+    // GPU). Otherwise boot directly through the recompiler: this runs the
+    // guest's x86 entry point on ARM and services its syscalls until it hits
+    // an HLE function not yet implemented.
+    if (Hooks::StartEmulator()) {
+        state.store(State::Running, std::memory_order_release);
+        gate_cv.notify_all();
+        return true;
+    }
+
     state.store(State::Running, std::memory_order_release);
     gate_cv.notify_all();
-    return true;
+
+    Core::Recompiler::Booter booter{*jit, *guest_loader};
+    const auto result = booter.Boot(*loaded_module);
+    last_boot_status = static_cast<int>(result.status);
+    last_boot_message = result.message;
+    if (!result.symbol.empty()) {
+        last_boot_message += " (" + result.symbol + ")";
+    }
+    state.store(State::Idle, std::memory_order_release);
+    return result.status == Core::Recompiler::BootResult::Status::CleanExit ||
+           result.status == Core::Recompiler::BootResult::Status::SyscallStop;
 }
 
 void Host::Pause() {

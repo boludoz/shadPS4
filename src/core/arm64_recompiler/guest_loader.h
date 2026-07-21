@@ -77,6 +77,8 @@ public:
     }
 
 private:
+    void InstallTrampoline();
+
     Allocator allocator;
     std::string error;
     u64 unresolved_trampoline = 0;

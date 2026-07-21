@@ -44,6 +44,10 @@ object NativeLibrary {
     external fun stopEmulation()
     external fun getState(): Int
 
+    /** ARM64 boot outcome; see BootResult::Status in boot.h. -1 = not run. */
+    external fun getLastBootStatus(): Int
+    external fun getLastBootMessage(): String
+
     external fun setPadButtons(buttons: Int)
     external fun setPadAxis(axis: Int, value: Float)
 }

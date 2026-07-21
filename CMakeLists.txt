@@ -1246,6 +1246,12 @@ if (ENABLE_ARM64_RECOMPILER)
         src/core/arm64_recompiler/jit_engine.h
         src/core/arm64_recompiler/recompiler_api.cpp
         src/core/arm64_recompiler/recompiler_api.h
+        src/core/arm64_recompiler/guest_loader.cpp
+        src/core/arm64_recompiler/guest_loader.h
+        src/core/arm64_recompiler/boot.cpp
+        src/core/arm64_recompiler/boot.h
+        src/core/aerolib/aerolib.cpp
+        src/core/aerolib/aerolib.h
     )
     target_include_directories(arm64_recompiler PUBLIC src ${LLVM_INCLUDE_DIRS})
     target_compile_definitions(arm64_recompiler PUBLIC ${LLVM_DEFINITIONS})
@@ -1254,8 +1260,14 @@ if (ENABLE_ARM64_RECOMPILER)
     add_executable(x86_to_arm64 src/tools/x86_to_arm64.cpp)
     target_link_libraries(x86_to_arm64 PRIVATE arm64_recompiler)
 
+    add_executable(boot_x86_elf src/tools/boot_x86_elf.cpp)
+    target_link_libraries(boot_x86_elf PRIVATE arm64_recompiler)
+
     add_executable(arm64_recompiler_test tests/arm64_recompiler_test.cpp)
     target_link_libraries(arm64_recompiler_test PRIVATE arm64_recompiler)
+
+    add_executable(arm64_boot_test tests/arm64_boot_test.cpp)
+    target_link_libraries(arm64_boot_test PRIVATE arm64_recompiler)
 endif()
 
 if(NOT ENABLE_TESTS)

@@ -111,6 +111,38 @@ On Android the same `Booter` runs from `Host::Start()`: `loadGame()` maps the
 executable, `precompileAot()` translates it, `startEmulation()` boots it, and
 `getLastBootStatus()/getLastBootMessage()` report where it stopped.
 
+## HLE bridge: audio, pad, kernel
+
+`src/core/arm64_recompiler/hle/` is the connector that lets translated guest
+code call real native implementations instead of faulting on every import:
+
+* **HleRegistry** (`hle_registry.h`) maps a PS4 NID to a native function. The
+  `Wrap<func>()` adapter reads the guest's six SysV argument registers and
+  marshals them to the function's real C parameters (integers and pointers),
+  so the compiler emits a correct guest-SysV -> host-AAPCS64 call on device.
+* The **Booter** binds every import whose NID the registry knows onto that
+  import's trampoline address, then runs. Imports with no implementation keep
+  the fault trampoline, so a game still stops with the *name* of the first
+  thing that is genuinely missing.
+* Modules implemented so far:
+  * `hle_audio` — `sceAudioOut` (init/open/output/setvolume/close) over an
+    `AudioBackend`. Backends: **OpenAL** (`SHADPS4_HAVE_OPENAL`, real sound,
+    queued streaming with back-pressure) or a null sink that still paces the
+    guest audio thread to real time.
+  * `hle_pad` — `scePad` (open/readState/read/...) formatting an
+    ABI-identical `OrbisPadData`. Backends: **SDL3** gamepads
+    (`SHADPS4_HAVE_SDL`, real controllers mapped to the PS4 layout) or an
+    injectable backend the Android on-screen overlay / tests feed.
+  * `hle_kernel` — a minimal libkernel subset (direct-memory alloc/map,
+    tcb/errno) so crt0 and libc init can progress.
+
+`tests/arm64_hle_test.cpp` drives these through the register-marshaling
+adapter and through the actual JIT (a translated `call` diverting into native
+`sceAudioOutInit`), asserting audio frames and pad bytes reach the backend.
+
+The Android `NativeLibrary.setPadButtons/setPadAxis` feed the injectable pad
+backend from an on-screen overlay; the OpenAL backend plays a game's audio.
+
 ### What is deliberately not finished
 
 * The instruction subset covers the common integer/control-flow/scalar-SSE

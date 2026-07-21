@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "core/arm64_recompiler/boot.h"
+#include "core/arm64_recompiler/hle/hle_registry.h"
 #include "core/arm64_recompiler/jit_engine.h"
 
 namespace Core::Recompiler {
@@ -35,6 +36,7 @@ struct BootState {
     bool exited = false;
     u64 exit_code = 0;
     u64 blocks = 0;
+    u64 bound_hle = 0;
 
     // Set when the guest jumped into an unresolved-import trampoline.
     bool missing_hle = false;
@@ -184,11 +186,29 @@ BootResult Booter::Boot(const GuestLoader::LoadedModule& module, u64 stack_size)
     jit.SetUnsupportedHandler(&UnsupportedHandlerImpl, &g_state);
     jit.SetMemoryReader(IdentityMemoryReader());
 
+    // ---- Bind HLE --------------------------------------------------------
+    // For every import the registry knows, register its native implementation
+    // at the trampoline the loader pointed the import slot at. When the guest
+    // calls the function it lands there and the dispatcher diverts to native
+    // code (audio, pad, kernel...). Imports with no implementation keep the
+    // fault trampoline so they are reported by name if the game calls them.
+    auto& registry = Hle::HleRegistry::Instance();
+    registry.RegisterBuiltins();
+    u64 bound = 0;
+    for (const auto& sym : module.imports) {
+        if (Hle::HleFn fn = registry.Find(sym.nid)) {
+            jit.RegisterHleFunction(sym.trampoline, reinterpret_cast<HleFn>(fn));
+            ++bound;
+        }
+    }
+    g_state.bound_hle = bound;
+
     // ---- Run -------------------------------------------------------------
     const ExitReason reason = jit.Run(ctx);
 
     result.rip = g_state.fault_rip ? g_state.fault_rip : ctx.rip;
     result.blocks_executed = g_state.blocks;
+    result.hle_bound = g_state.bound_hle;
 
     if (g_state.missing_hle) {
         result.status = BootResult::Status::MissingHle;

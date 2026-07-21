@@ -1250,6 +1250,16 @@ if (ENABLE_ARM64_RECOMPILER)
         src/core/arm64_recompiler/guest_loader.h
         src/core/arm64_recompiler/boot.cpp
         src/core/arm64_recompiler/boot.h
+        src/core/arm64_recompiler/hle/hle_registry.cpp
+        src/core/arm64_recompiler/hle/hle_registry.h
+        src/core/arm64_recompiler/hle/hle_kernel.cpp
+        src/core/arm64_recompiler/hle/hle_kernel.h
+        src/core/arm64_recompiler/hle/hle_audio.cpp
+        src/core/arm64_recompiler/hle/hle_audio.h
+        src/core/arm64_recompiler/hle/hle_audio_backend.cpp
+        src/core/arm64_recompiler/hle/hle_pad.cpp
+        src/core/arm64_recompiler/hle/hle_pad.h
+        src/core/arm64_recompiler/hle/hle_pad_backend.cpp
         src/core/aerolib/aerolib.cpp
         src/core/aerolib/aerolib.h
     )
@@ -1268,6 +1278,9 @@ if (ENABLE_ARM64_RECOMPILER)
 
     add_executable(arm64_boot_test tests/arm64_boot_test.cpp)
     target_link_libraries(arm64_boot_test PRIVATE arm64_recompiler)
+
+    add_executable(arm64_hle_test tests/arm64_hle_test.cpp)
+    target_link_libraries(arm64_hle_test PRIVATE arm64_recompiler)
 endif()
 
 if(NOT ENABLE_TESTS)

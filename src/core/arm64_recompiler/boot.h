@@ -28,6 +28,7 @@ struct BootResult {
     u64 rip = 0;              // guest RIP where it stopped
     u64 exit_code = 0;        // for CleanExit / SyscallStop
     u64 blocks_executed = 0;  // rough progress metric
+    u64 hle_bound = 0;        // imports resolved to native HLE
 };
 
 /// Owns the syscall/HLE glue for one guest process and runs it.

@@ -61,6 +61,12 @@ set(SHADPS4_ANDROID_SOURCES
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/recompiler_api.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/guest_loader.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/boot.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_registry.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_kernel.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_audio.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_audio_backend.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_pad.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_pad_backend.cpp
     ${SHADPS4_ROOT}/src/core/aerolib/aerolib.cpp
     ${SHADPS4_ROOT}/src/android/android_host.cpp
     ${SHADPS4_ROOT}/src/android/jni_bridge.cpp
@@ -79,6 +85,26 @@ add_library(shadps4-android SHARED ${SHADPS4_ANDROID_SOURCES})
 
 target_include_directories(shadps4-android PRIVATE ${SHADPS4_ROOT}/src)
 target_link_libraries(shadps4-android PRIVATE Zydis android log)
+
+# Real audio/pad backends when their libraries are available. Both are already
+# vendored in externals (openal-soft, sdl3); enable them for the APK to get
+# sound and controller input. Left optional so the .so builds without them.
+option(SHADPS4_ENABLE_OPENAL "Build the OpenAL audio backend" ON)
+option(SHADPS4_ENABLE_SDL "Build the SDL gamepad backend" ON)
+if (SHADPS4_ENABLE_OPENAL AND EXISTS ${SHADPS4_ROOT}/externals/openal-soft/CMakeLists.txt)
+    set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${SHADPS4_ROOT}/externals/openal-soft openal EXCLUDE_FROM_ALL)
+    target_compile_definitions(shadps4-android PRIVATE SHADPS4_HAVE_OPENAL)
+    target_include_directories(shadps4-android PRIVATE ${SHADPS4_ROOT}/externals/openal-soft/include)
+    target_link_libraries(shadps4-android PRIVATE OpenAL)
+endif()
+if (SHADPS4_ENABLE_SDL AND EXISTS ${SHADPS4_ROOT}/externals/sdl3/CMakeLists.txt)
+    add_subdirectory(${SHADPS4_ROOT}/externals/sdl3 sdl3 EXCLUDE_FROM_ALL)
+    target_compile_definitions(shadps4-android PRIVATE SHADPS4_HAVE_SDL)
+    target_link_libraries(shadps4-android PRIVATE SDL3::SDL3)
+endif()
 
 if (SHADPS4_HAVE_LLVM)
     llvm_map_components_to_libnames(SHADPS4_LLVM_LIBS

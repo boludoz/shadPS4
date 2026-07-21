@@ -403,8 +403,9 @@ std::optional<GuestLoader::LoadedModule> GuestLoader::Load(const std::filesystem
                 s.nid = nid;
                 s.name = ResolveNidName(nid);
                 s.stub_slot = where;
+                const u64 tramp = unresolved_trampoline + (mod.imports.size() + 1) * 16;
+                s.trampoline = tramp;
                 mod.imports.push_back(s);
-                const u64 tramp = unresolved_trampoline + mod.imports.size() * 16;
                 trampoline_names[tramp] = s.name;
                 return tramp;
             };

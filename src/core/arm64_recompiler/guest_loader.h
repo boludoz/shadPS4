@@ -35,6 +35,7 @@ public:
         std::string nid;         // 11-char encoded NID (or plain name for homebrew)
         std::string name;        // demangled name if known via aerolib, else nid
         u64 stub_slot;           // guest address of the GOT/PLT slot to fill
+        u64 trampoline;          // address the slot points at (bind HLE here)
     };
 
     struct LoadedModule {

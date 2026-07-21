@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 plugins {
-    id("com.android.application") version "8.5.0"
+    id("com.android.application") version "8.5.2"
     id("org.jetbrains.kotlin.android") version "2.0.0"
 }
 
 android {
     namespace = "net.shadps4.android"
     compileSdk = 35
-    ndkVersion = "27.0.12077973"
+    // Any NDK r26+ works; pin one in local.properties/ndkVersion if needed.
 
     defaultConfig {
         applicationId = "net.shadps4.android"
@@ -27,9 +27,9 @@ android {
             cmake {
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
-                    // Path to a prebuilt LLVM for Android arm64, see
-                    // documents/building-android.md:
-                    "-DLLVM_DIR=${System.getenv("SHADPS4_LLVM_ANDROID") ?: ""}/lib/cmake/llvm",
+                    // Optional prebuilt LLVM for the full recompiler; empty
+                    // is fine (stub mode). See scripts/build_llvm_android.sh.
+                    "-DSHADPS4_LLVM_DIR=${System.getenv("SHADPS4_LLVM_ANDROID") ?: ""}",
                 )
             }
         }
@@ -38,7 +38,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            version = "3.22.1+"
         }
     }
 

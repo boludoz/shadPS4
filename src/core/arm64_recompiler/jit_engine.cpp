@@ -47,6 +47,8 @@ struct JitEngine::Impl {
     std::unordered_map<u64, HleFn> hle;
     UnsupportedHandler unsupported_handler = nullptr;
     void* unsupported_user = nullptr;
+    SyscallHandler syscall_handler = nullptr;
+    void* syscall_user = nullptr;
 };
 
 JitEngine::JitEngine() : impl{std::make_unique<Impl>()} {
@@ -97,6 +99,11 @@ void JitEngine::RegisterHleFunction(u64 guest_va, HleFn fn) {
 void JitEngine::SetUnsupportedHandler(UnsupportedHandler handler, void* user) {
     impl->unsupported_handler = handler;
     impl->unsupported_user = user;
+}
+
+void JitEngine::SetSyscallHandler(SyscallHandler handler, void* user) {
+    impl->syscall_handler = handler;
+    impl->syscall_user = user;
 }
 
 void JitEngine::SetMemoryReader(MemoryReader reader) {
@@ -220,6 +227,12 @@ ExitReason JitEngine::Run(GuestContext& ctx) {
             if (reason == ExitReason::UnsupportedInstruction && impl->unsupported_handler) {
                 ctx.exit_reason = ExitReason::None;
                 if (impl->unsupported_handler(ctx, impl->unsupported_user)) {
+                    continue;
+                }
+            }
+            if (reason == ExitReason::Syscall && impl->syscall_handler) {
+                ctx.exit_reason = ExitReason::None;
+                if (impl->syscall_handler(ctx, impl->syscall_user)) {
                     continue;
                 }
             }

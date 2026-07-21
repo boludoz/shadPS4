@@ -26,6 +26,12 @@ using HleFn = u64 (*)(u64, u64, u64, u64, u64, u64);
 /// as a FEXCore-based interpreter plugs in.
 using UnsupportedHandler = bool (*)(GuestContext& ctx, void* user);
 
+/// Handler invoked when the guest executes a `syscall` instruction. ctx.rip
+/// already points past it; the handler emulates the call (number in RAX,
+/// args in RDI,RSI,RDX,R10,R8,R9; result to RAX) and returns true, or false
+/// to stop emulation.
+using SyscallHandler = bool (*)(GuestContext& ctx, void* user);
+
 /// Runtime translation engine: LLVM ORC based fallback JIT plus dispatcher.
 ///
 /// Role in the architecture: the AOT pass covers everything reachable
@@ -52,6 +58,7 @@ public:
     void RegisterHleFunction(u64 guest_va, HleFn fn);
 
     void SetUnsupportedHandler(UnsupportedHandler handler, void* user);
+    void SetSyscallHandler(SyscallHandler handler, void* user);
 
     /// Guest memory resolver used when translating at runtime. Defaults to
     /// the identity mapping (guest VA == host VA).

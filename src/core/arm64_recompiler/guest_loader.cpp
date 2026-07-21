@@ -295,6 +295,7 @@ std::optional<GuestLoader::LoadedModule> GuestLoader::Load(const std::filesystem
     const u64 bias = reinterpret_cast<u64>(host) - low;
 
     LoadedModule mod{};
+    mod.name = path.stem().string();
     mod.base = bias;
     mod.image_low = low + bias;
     mod.image_high = high + bias;
@@ -381,9 +382,22 @@ std::optional<GuestLoader::LoadedModule> GuestLoader::Load(const std::filesystem
                     break;
                 }
             }
-            (void)symtab_size;
-
             InstallTrampoline();
+
+            // Collect this module's defined symbols so other modules'
+            // imports can bind to them (the .prx <-> eboot case).
+            if (symtab && strtab && symtab_size) {
+                const size_t sym_count = symtab_size / sizeof(SceSymbol);
+                for (size_t i = 0; i < sym_count; ++i) {
+                    const SceSymbol& sym = symtab[i];
+                    if (sym.st_value == 0 || sym.st_shndx == 0 || sym.st_name == 0) {
+                        continue;
+                    }
+                    std::string encoded = strtab + sym.st_name;
+                    const std::string nid = encoded.substr(0, encoded.find('#'));
+                    mod.exports.emplace(nid, sym.st_value + bias);
+                }
+            }
 
             auto resolve = [&](u32 sym_index, u64 addend, u64 where) -> u64 {
                 if (!symtab || !strtab) {
@@ -398,12 +412,15 @@ std::optional<GuestLoader::LoadedModule> GuestLoader::Load(const std::filesystem
                     return sym.st_value + bias + addend;
                 }
                 // Imported: record it and point at a per-symbol trampoline so
-                // the first call lands somewhere we can name.
+                // the first call lands somewhere we can name. The cursor is
+                // shared across every module this loader loads so no two
+                // imports alias one trampoline.
                 Symbol s{};
                 s.nid = nid;
                 s.name = ResolveNidName(nid);
                 s.stub_slot = where;
-                const u64 tramp = unresolved_trampoline + (mod.imports.size() + 1) * 16;
+                s.addend = addend;
+                const u64 tramp = unresolved_trampoline + (++trampoline_cursor) * 16;
                 s.trampoline = tramp;
                 mod.imports.push_back(s);
                 trampoline_names[tramp] = s.name;
@@ -441,6 +458,34 @@ std::optional<GuestLoader::LoadedModule> GuestLoader::Load(const std::filesystem
     }
 
     return mod;
+}
+
+u64 GuestLoader::ResolveImports(std::vector<LoadedModule*> modules) {
+    u64 resolved = 0;
+    for (LoadedModule* mod : modules) {
+        for (auto& import : mod->imports) {
+            if (import.resolved) {
+                continue;
+            }
+            for (const LoadedModule* provider : modules) {
+                if (provider == mod) {
+                    continue;
+                }
+                const auto it = provider->exports.find(import.nid);
+                if (it == provider->exports.end()) {
+                    continue;
+                }
+                // Re-point the GOT/PLT slot from the fault trampoline at the
+                // real export, exactly what the desktop linker's relocation
+                // pass does once the dependency is loaded.
+                *reinterpret_cast<u64*>(import.stub_slot) = it->second + import.addend;
+                import.resolved = true;
+                ++resolved;
+                break;
+            }
+        }
+    }
+    return resolved;
 }
 
 void GuestLoader::InstallTrampoline() {

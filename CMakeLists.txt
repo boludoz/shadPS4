@@ -1248,6 +1248,8 @@ if (ENABLE_ARM64_RECOMPILER)
         src/core/arm64_recompiler/recompiler_api.h
         src/core/arm64_recompiler/guest_loader.cpp
         src/core/arm64_recompiler/guest_loader.h
+        src/core/arm64_recompiler/game_package.cpp
+        src/core/arm64_recompiler/game_package.h
         src/core/arm64_recompiler/boot.cpp
         src/core/arm64_recompiler/boot.h
         src/core/arm64_recompiler/hle/hle_registry.cpp

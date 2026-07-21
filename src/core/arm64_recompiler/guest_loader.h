@@ -36,9 +36,12 @@ public:
         std::string name;        // demangled name if known via aerolib, else nid
         u64 stub_slot;           // guest address of the GOT/PLT slot to fill
         u64 trampoline;          // address the slot points at (bind HLE here)
+        u64 addend = 0;          // relocation addend (R_X86_64_64 imports)
+        bool resolved = false;   // true once bound to another module's export
     };
 
     struct LoadedModule {
+        std::string name;        // file stem, for diagnostics ("eboot", "libc"...)
         u64 base = 0;            // load bias applied to p_vaddr
         u64 entry = 0;           // guest RIP to start at
         u64 image_low = 0;       // lowest mapped guest address
@@ -50,6 +53,9 @@ public:
         u64 proc_param = 0;      // PT_SCE_PROCPARAM vaddr, 0 if none
         std::vector<u64> entry_points; // entry + module_start etc., for AOT discovery
         std::vector<Symbol> imports;
+        // Defined symbols this module provides, NID -> guest address. Used to
+        // resolve other modules' imports, like the desktop linker does.
+        std::unordered_map<std::string, u64> exports;
         bool is_shared = false;
     };
 
@@ -61,8 +67,17 @@ public:
     explicit GuestLoader(Allocator allocator = {});
 
     /// Loads the file. On success returns the module; on failure returns
-    /// nullopt and GetError() describes why.
+    /// nullopt and GetError() describes why. May be called repeatedly on the
+    /// same loader to build up a process image (eboot + its .prx modules);
+    /// every module shares one trampoline namespace.
     std::optional<LoadedModule> Load(const std::filesystem::path& path);
+
+    /// Cross-module import resolution, mirroring the desktop linker: for each
+    /// import whose NID another loaded module exports, the GOT/PLT slot is
+    /// re-pointed from the fault trampoline to the real export. Imports no
+    /// module provides keep their trampoline (HLE binds there, or the first
+    /// call reports the missing symbol by name). Returns resolved count.
+    static u64 ResolveImports(std::vector<LoadedModule*> modules);
 
     /// Address of the guest fault trampoline installed for unresolved imports.
     /// The syscall/unsupported handler recognizes it to report which HLE
@@ -83,6 +98,7 @@ private:
     Allocator allocator;
     std::string error;
     u64 unresolved_trampoline = 0;
+    u64 trampoline_cursor = 0; // next free trampoline slot, shared by all modules
     std::unordered_map<u64, std::string> trampoline_names;
     std::vector<u8> file_bytes; // backing store when reading fSELF/ELF
 };

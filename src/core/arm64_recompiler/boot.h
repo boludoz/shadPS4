@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/arm64_recompiler/guest_context.h"
 #include "core/arm64_recompiler/guest_loader.h"
@@ -46,6 +49,22 @@ public:
     /// stack_size is the guest main-thread stack (default 8 MiB).
     BootResult Boot(const GuestLoader::LoadedModule& module, u64 stack_size = 8 * 1024 * 1024);
 
+    /// Boots a full dump: first runs module_start of each preload module
+    /// (the game's sce_module/*.prx, in load order) the way the PS4 dynamic
+    /// linker does, then enters the eboot. A preload that stops on a missing
+    /// HLE call or unsupported instruction aborts the boot and names the
+    /// module in the result message.
+    BootResult Boot(const GuestLoader::LoadedModule& main_module,
+                    const std::vector<const GuestLoader::LoadedModule*>& preload,
+                    u64 stack_size = 8 * 1024 * 1024);
+
+    /// Maps a guest path prefix onto a host directory for the file syscalls,
+    /// e.g. AddMount("/app0", dump_dir) — the same view of the dump the
+    /// desktop build's mount table gives the game.
+    void AddMount(std::string guest_prefix, std::filesystem::path host_dir) {
+        mounts.emplace_back(std::move(guest_prefix), std::move(host_dir));
+    }
+
     /// Redirects guest stdout/stderr writes (SYS_write) somewhere; defaults to
     /// host stdout. Lets the frontend show a game's early logging.
     void SetWriteSink(std::function<void(int fd, const char* data, u64 len)> sink) {
@@ -56,6 +75,7 @@ private:
     JitEngine& jit;
     const GuestLoader& loader;
     std::function<void(int fd, const char* data, u64 len)> write_sink;
+    std::vector<std::pair<std::string, std::filesystem::path>> mounts;
 };
 
 } // namespace Core::Recompiler

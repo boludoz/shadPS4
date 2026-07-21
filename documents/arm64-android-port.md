@@ -67,6 +67,27 @@ LLVM's optimizer deletes the dead computations. Guest memory accesses are
 direct host loads/stores (flat address space, same trade-off the x86 build
 makes).
 
+## Loading a dumped game like the desktop build
+
+`game_package.{h,cpp}` mirrors the front half of the desktop `Emulator::Run()`
+so a copy is loaded on Android exactly the way shadPS4 loads it on PC:
+
+* **GamePackage::Resolve** accepts the dump folder or the `eboot.bin` inside
+  it (same resolution as the desktop file picker), reads
+  `sce_sys/param.sfo` (TITLE, TITLE_ID, APP_VER, CONTENT_ID, SYSTEM_VER —
+  exposed to the APK via `getGameTitle()/getGameTitleId()/getGameVersion()`),
+  and enumerates the game's bundled `sce_module/*.prx`.
+* The Android host loads the eboot **and every bundled .prx** through one
+  `GuestLoader` and then runs `GuestLoader::ResolveImports` across them: an
+  import one module needs that another module exports is re-pointed at the
+  real code, exactly what the desktop linker's relocation pass does. Only
+  imports no module provides are left on HLE trampolines.
+* The `Booter` mounts the dump at `/app0` (`AddMount`), so the guest's file
+  syscalls (`open/read/lseek/fstat/close`) serve the game's own assets from
+  the copy, matching the desktop mount table. Before entering the eboot it
+  runs `module_start` of each loaded .prx in order, as libkernel does on the
+  console.
+
 ## Booting a title
 
 `guest_loader.{h,cpp}` and `boot.{h,cpp}` turn the translator into something
@@ -155,8 +176,11 @@ backend from an on-screen overlay; the OpenAL backend plays a game's audio.
   call, which the loader names for you. Implementing those libraries against
   this boot chain is the remaining work to run full titles, and the weak
   hooks (`Android::Hooks::*`) are where shadPS4's existing HLE attaches.
-* The emulator core (full linker with multi-`.prx` dependency loading,
-  video_core / Vulkan) does not build against the NDK yet.
+* Multi-module loading is handled by `GuestLoader` + `ResolveImports`
+  (eboot + `sce_module/*.prx` with cross-module symbol binding), but system
+  modules from firmware (`libSceLibcInternal.sprx` etc.) are not searched
+  yet, and the desktop emulator core (video_core / Vulkan) does not build
+  against the NDK yet.
 
 ## Trying the pipeline on a desktop
 

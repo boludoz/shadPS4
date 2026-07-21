@@ -23,7 +23,17 @@ object NativeLibrary {
 
     external fun initialize(userDir: String, firmwareDir: String): Boolean
 
+    /**
+     * Loads a dumped game exactly like the desktop build: pass the dump
+     * folder or its eboot.bin. Reads sce_sys/param.sfo, loads the eboot and
+     * every sce_module/*.prx, and mounts the dump as /app0.
+     */
     external fun loadGame(path: String): Boolean
+
+    /** Title metadata from param.sfo; empty until [loadGame] succeeds. */
+    external fun getGameTitle(): String
+    external fun getGameTitleId(): String
+    external fun getGameVersion(): String
 
     /**
      * Runs the x86 -> LLVM IR -> ARM64 ahead-of-time pass ("loading screen").

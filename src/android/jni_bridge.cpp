@@ -61,6 +61,21 @@ JNIEXPORT jboolean JNICALL Java_net_shadps4_android_NativeLibrary_loadGame(JNIEn
     return Android::Host::Instance().LoadGame(ToString(env, path)) ? JNI_TRUE : JNI_FALSE;
 }
 
+// Title metadata from the dump's sce_sys/param.sfo, valid after loadGame().
+JNIEXPORT jstring JNICALL Java_net_shadps4_android_NativeLibrary_getGameTitle(JNIEnv* env, jclass) {
+    return env->NewStringUTF(Android::Host::Instance().GetGameTitle().c_str());
+}
+
+JNIEXPORT jstring JNICALL Java_net_shadps4_android_NativeLibrary_getGameTitleId(JNIEnv* env,
+                                                                                jclass) {
+    return env->NewStringUTF(Android::Host::Instance().GetGameTitleId().c_str());
+}
+
+JNIEXPORT jstring JNICALL Java_net_shadps4_android_NativeLibrary_getGameVersion(JNIEnv* env,
+                                                                                jclass) {
+    return env->NewStringUTF(Android::Host::Instance().GetGameVersion().c_str());
+}
+
 JNIEXPORT jboolean JNICALL Java_net_shadps4_android_NativeLibrary_precompileAot(JNIEnv*, jclass) {
     return Android::Host::Instance().PrecompileAot() ? JNI_TRUE : JNI_FALSE;
 }

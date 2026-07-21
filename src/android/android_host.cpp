@@ -86,25 +86,54 @@ bool Host::LoadGame(const std::string& path) {
     if (GetState() != State::Idle) {
         return false;
     }
-    // Load the decrypted PS4 executable directly with the built-in loader
-    // (maps segments, applies relocations, resolves imports). The weak
-    // Hooks::LoadGame lets the full emulator core augment this later (mounting
-    // the game's filesystem, loading dependent .prx modules).
+    // Resolve the dump the way the desktop Emulator::Run() does: folder or
+    // eboot.bin, sce_sys/param.sfo metadata, sce_module/*.prx list.
+    std::string error;
+    const auto package = Core::Recompiler::GamePackage::Resolve(path, &error);
+    if (!package) {
+        return false;
+    }
+    game_title = package->title;
+    game_title_id = package->title_id;
+    game_version = package->app_version;
+
+    // Load the eboot and every bundled module through one loader (shared
+    // trampoline namespace), then resolve imports across them — a .prx
+    // export satisfies an eboot import and vice versa, exactly like the
+    // desktop linker. Only what no module provides is left for HLE.
     guest_loader = std::make_unique<Core::Recompiler::GuestLoader>();
-    auto module = guest_loader->Load(path);
+    auto module = guest_loader->Load(package->eboot_path);
     if (!module) {
         guest_loader.reset();
         return false;
     }
-    game_path = path;
+    preload_modules.clear();
+    for (const auto& prx : package->sce_modules) {
+        if (auto loaded = guest_loader->Load(prx)) {
+            preload_modules.push_back(std::move(*loaded));
+        }
+        // A .prx that fails to load is skipped rather than fatal: its imports
+        // surface later, named, if the game actually calls into it.
+    }
+    game_path = package->eboot_path;
+    game_dir = package->game_dir;
     loaded_module = std::move(module);
+
+    std::vector<Core::Recompiler::GuestLoader::LoadedModule*> all;
+    all.push_back(&*loaded_module);
+    for (auto& mod : preload_modules) {
+        all.push_back(&mod);
+    }
+    Core::Recompiler::GuestLoader::ResolveImports(all);
+
     code_regions.clear();
-    code_regions.push_back(
-        CodeRegion{loaded_module->image_low, loaded_module->image_high - loaded_module->image_low,
-                   loaded_module->entry_points});
+    for (const auto* mod : all) {
+        code_regions.push_back(
+            CodeRegion{mod->image_low, mod->image_high - mod->image_low, mod->entry_points});
+    }
 
     std::vector<CodeRegion> extra;
-    if (Hooks::LoadGame(path, extra)) {
+    if (Hooks::LoadGame(game_path, extra)) {
         for (auto& region : extra) {
             code_regions.push_back(std::move(region));
         }
@@ -174,7 +203,14 @@ bool Host::Start() {
     gate_cv.notify_all();
 
     Core::Recompiler::Booter booter{*jit, *guest_loader};
-    const auto result = booter.Boot(*loaded_module);
+    // The game sees its dump at /app0 through the boot VFS, matching the
+    // desktop mount table.
+    booter.AddMount("/app0", game_dir);
+    std::vector<const Core::Recompiler::GuestLoader::LoadedModule*> preload;
+    for (const auto& mod : preload_modules) {
+        preload.push_back(&mod);
+    }
+    const auto result = booter.Boot(*loaded_module, preload);
     last_boot_status = static_cast<int>(result.status);
     last_boot_message = result.message;
     if (!result.symbol.empty()) {

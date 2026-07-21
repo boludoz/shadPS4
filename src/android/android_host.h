@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "common/types.h"
+#include "core/arm64_recompiler/game_package.h"
 #include "core/arm64_recompiler/guest_loader.h"
 
 struct ANativeWindow;
@@ -67,8 +68,23 @@ public:
     }
 
     // ---- Emulation lifecycle --------------------------------------------
-    /// Loads an eboot.bin / game directory. Does not start execution.
+    /// Loads a dumped game the way the desktop build does: accepts the dump
+    /// folder or its eboot.bin, reads sce_sys/param.sfo, loads the eboot plus
+    /// every sce_module/*.prx and resolves imports across them, and mounts
+    /// the dump as /app0. Does not start execution.
     bool LoadGame(const std::string& path);
+
+    // Title metadata from param.sfo (empty for homebrew without one), valid
+    // after LoadGame().
+    const std::string& GetGameTitle() const {
+        return game_title;
+    }
+    const std::string& GetGameTitleId() const {
+        return game_title_id;
+    }
+    const std::string& GetGameVersion() const {
+        return game_version;
+    }
 
     /// Runs the AOT pass over the loaded module's code segments, writing to
     /// <user_dir>/aot_cache. progress in [0,100] is reported through the
@@ -113,13 +129,19 @@ private:
 
     std::filesystem::path user_dir;
     std::filesystem::path firmware_dir;
-    std::filesystem::path game_path;
+    std::filesystem::path game_path; // eboot.bin of the loaded dump
+    std::filesystem::path game_dir;  // dump root, mounted as /app0
+    std::string game_title;
+    std::string game_title_id;
+    std::string game_version;
     std::vector<CodeRegion> code_regions;
 
-    // Loaded guest module and the loader that owns its import trampolines
-    // (both valid once LoadGame succeeds).
+    // Loaded guest modules (eboot + sce_module .prx, in load order) and the
+    // loader that owns their import trampolines (valid once LoadGame
+    // succeeds).
     std::unique_ptr<Core::Recompiler::GuestLoader> guest_loader;
     std::optional<Core::Recompiler::GuestLoader::LoadedModule> loaded_module;
+    std::vector<Core::Recompiler::GuestLoader::LoadedModule> preload_modules;
 
     int last_boot_status = -1;
     std::string last_boot_message;

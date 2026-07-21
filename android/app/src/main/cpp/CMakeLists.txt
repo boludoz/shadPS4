@@ -60,6 +60,7 @@ set(SHADPS4_ANDROID_SOURCES
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/x86_decoder.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/recompiler_api.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/guest_loader.cpp
+    ${SHADPS4_ROOT}/src/core/arm64_recompiler/game_package.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/boot.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_registry.cpp
     ${SHADPS4_ROOT}/src/core/arm64_recompiler/hle/hle_kernel.cpp
